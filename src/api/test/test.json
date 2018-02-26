@@ -1,0 +1,34 @@
+{
+  "api": {
+    "dev_id": "410040001650334856333220",
+    "sn_id": "272B430065",
+    "station_id": 222,
+    "name": "测试基站",
+    "latitude": 23.175223852,
+    "longitude": 113.510861598,
+    "work_mode": "1",
+    "province_id": 19,
+    "province_name": "广东省",
+    "city_id": 289,
+    "city_name": "广州市",
+    "district_id": 0,
+    "district_name": "黄埔区",
+    "address": "广东省广州市黄埔区政园路"
+  },
+  "comments":[
+    {
+      "id": 1,
+      "news_id": 1,
+      "data": [
+        {
+          "id": 1,
+          "content": "121212"
+        },
+        {
+          "id": 2,
+          "content": "34343！"
+        }
+      ]
+    }
+  ]
+}
