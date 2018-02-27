@@ -34,9 +34,6 @@ class Curve {
       this.el.addEventListener('mousedown', this.mouseDown.bind(this))
       this.el.addEventListener('mousemove', this.mouseMove.bind(this))
       this.el.addEventListener('mouseup', this.mouseUp.bind(this))
-      this.el.addEventListener('resize', () => {
-        console.log('change')
-      })
     }
   }
   /* 画布操作 */
@@ -100,7 +97,13 @@ class Curve {
     ctx = ctx || this.ctx
     ctx.beginPath()
     ctx.moveTo(list[0][0][0], list[0][0][1])
-    list.forEach(x => this.setCurvefragment(x, ctx))
+    list.forEach((x, y) => {
+      if (y === 0 || y === list.length - 1) {
+        this.ctx.lineTo(x[3][0], x[3][1])
+      } else {
+        this.setCurvefragment(x, ctx)
+      }
+    })
   }
   drawCurvePath (arr, ctx, option = {}) { // 直接绘制曲线路径,可直接使用
     var list = this.getCurveList(arr)
@@ -125,7 +128,7 @@ class Curve {
       this.pointArr.splice(this.newPointIndexAtClosed, 1)
     }
     this.curveList = this.getCurveList(this.pointArr)
-      // 重绘
+    // 重绘
     this.reDraw()
   }
   reDraw (cb) { // 重绘, 完成后可执行传入的回调
