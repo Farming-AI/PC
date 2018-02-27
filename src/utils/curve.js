@@ -7,19 +7,19 @@ class Curve {
     this.pointSize = option.pointSize || 3
     this.polyLineStrokeColor = option.polyLineStrokeColor || 'red'
     this.polyLineSize = option.polyLineSize || 3
-    this.fillColor = option.fillColor || 'blue'
+    this.fillColor = option.fillColor
+    this.isFill = option.isFill || true
     var el = option.el // canvas元素
     if (el) {
       this.el = el
       this.ctx = el.getContext('2d')
-      var canvasStyle = getComputedStyle(el)
       this.ctx.fillStyle = this.fillColor
       this.ctx.strokeStyle = this.polyLineStrokeColor
-      this.canvasWidth = parseInt(canvasStyle.width)
-      this.canvasHeight = parseInt(canvasStyle.height)
     }
     this.init()
-    this.addEvent()
+    if (!option.offEvent) { // 如果不需要内置的鼠标事件, 设置offEvent为true
+      this.addEvent()
+    }
   }
   init () {
     this.isMouseDown = false
@@ -30,16 +30,19 @@ class Curve {
     this.reDraw()
   }
   addEvent () { // 添加鼠标事件
-    console.log(this.el)
     if (this.el) {
       this.el.addEventListener('mousedown', this.mouseDown.bind(this))
       this.el.addEventListener('mousemove', this.mouseMove.bind(this))
       this.el.addEventListener('mouseup', this.mouseUp.bind(this))
+      this.el.addEventListener('resize', () => {
+        console.log('change')
+      })
     }
   }
-    /* 画布操作 */
+  /* 画布操作 */
   empty () {
-    this.ctx.clearRect(0, 0, this.canvasWidth, this.canvasHeight)
+    var canvasStyle = window.getComputedStyle(this.el)
+    this.ctx.clearRect(0, 0, canvasStyle.width.replace('px', ''), canvasStyle.height.replace('px', ''))
   }
   paintPoint (point, ctx = this.ctx) {
     if (!ctx) {
@@ -107,33 +110,37 @@ class Curve {
     }
     this.setCurvePath(list, ctx)
     ctx.stroke()
-    if (option.isFill) {
+    if (this.isFill) {
       ctx.fill()
     }
     ctx.restore()
   }
   withDraw (point) { // 撤回
+    if (this.pointArr.length <= 3 && this.isClosed) { // 当点少于3且是闭合状态时操作无效
+      return
+    }
     if (this.newPointIndexAtClosed === null) { // 当不是插入点的时候
       this.pointArr.pop()
     } else {
       this.pointArr.splice(this.newPointIndexAtClosed, 1)
     }
     this.curveList = this.getCurveList(this.pointArr)
-        // 重绘
+      // 重绘
     this.reDraw()
   }
-  reDraw () { // 重绘
+  reDraw (cb) { // 重绘, 完成后可执行传入的回调
     if (!this.el) { return }
     this.empty()
-    if (!this.isClosed) {
+    if (!this.isClosed || this.pointArr.length < 3) {
       this.reDrawAtDrawingDot()
     } else {
       this.reDrawAtClosedDot()
     }
+    cb && cb()
   }
   reDrawAtDrawingDot () { // 在描点时的重绘操作
     this.pointArr.forEach(point => this.paintPoint(point))
-        // 闭合前使用线段
+      // 闭合前使用线段
     var len = this.pointArr.length
     if (len < 2) { return }
     if (len < 3) {
@@ -145,25 +152,31 @@ class Curve {
     }
   }
   reDrawAtClosedDot () { // 在闭合时的重绘操作
+    this.ctx.save()
     this.pointArr.forEach(point => this.paintPoint(point))
     this.setCurvePath(this.curveList)
     this.ctx.stroke()
+    if (this.isFill) {
+      if (this.fillColor) { this.ctx.fillStyle = this.fillColor }
+      this.ctx.fill()
+      this.ctx.restore()
+    }
   }
   closePath () { // 闭合所有的点路径
     this.isClosed = true
     this.curveList = this.getCurveList(this.pointArr)
     this.reDraw()
   }
-  getClickPointInd (clickCoord) { // 判断是否点击在点上
-    var len = this.pointArr.length
+  getClickPointInd (clickCoord, points = this.pointArr) { // 判断是否点击在点上
+    var len = points.length
     for (var i = 0; i < len; i++) {
-      if (this.getPointDistance(this.pointArr[i], clickCoord) <= this.pointSize) { // 在点的范围内
+      if (this.getPointDistance(points[i], clickCoord) <= this.pointSize) { // 在点的范围内
         return i
       }
     }
     return false
   }
-    /* 对点集合的操作 */
+  /* 对点集合的操作 */
   add (point) {
     this.pointArr.push(point)
     this.reDraw()
@@ -177,7 +190,7 @@ class Curve {
   getPointList () { // 获取所有的点
     return this.pointArr.map(arr => arr.map(x => x))
   }
-    /* 计算函数 */
+  /* 计算函数 */
   getPointDistance (p0, p1) { // 获得两点的距离
     var x = p0[0] - p1[0]
     var y = p0[1] - p1[1]
@@ -187,11 +200,11 @@ class Curve {
   pow (num, k = 2) {
     return Math.pow(num, k)
   }
-    /* 鼠标事件 */
-  mouseDown (e) {
+  /* 鼠标事件 */
+  mouseDown (e, cb) { // 接收回调在重绘后执行
     this.isMouseDown = true
     var clickCoord = [e.offsetX, e.offsetY]
-    var num = this.getClickPointInd(clickCoord)
+    var num = this.getClickPointInd(clickCoord, this.pointArr)
     if (num !== false) { // 判断点击是否在点集合的点范围内，此时不可增加点
       var point = this.pointArr[num]
       this.selPoint = {
@@ -201,6 +214,7 @@ class Curve {
       }
     } else if (!this.isClosed) { // 未闭合的情况下,直接增加
       this.add(clickCoord)
+      cb && cb()
     } else { // 闭合的情况下,判断点是否在曲线上
       var ind = this.isPointInCurve(clickCoord)
       if (ind !== false) { // 增加点
@@ -214,27 +228,32 @@ class Curve {
         this.curveList = this.getCurveList(this.pointArr)
       }
       this.reDraw()
+      cb && cb()
     }
+    e.stopPropagation()
   }
-  mouseMove (e) {
+  mouseMove (e, cb) {
     if (this.isMouseDown && this.selPoint !== null) { // 此时需要移动点
       var mouseDownCoord = this.selPoint.clickCoord
       var index = this.selPoint.index
-      var x = e.clientX - mouseDownCoord[0]
-      var y = e.clientY - mouseDownCoord[1]
+      var x = e.offsetX - mouseDownCoord[0]
+      var y = e.offsetY - mouseDownCoord[1]
       var obj = this.selPoint.oldPoint
       this.pointArr[index] = [obj[0] + x, obj[1] + y]
-            // 获取新的曲线数组
+          // 获取新的曲线数组
       this.curveList = this.getCurveList(this.pointArr)
-            // 重绘
+          // 重绘
       this.reDraw()
+      cb && cb()
+      e.stopPropagation()
     }
   }
   mouseUp (e) {
     this.isMouseDown = false
     this.selPoint = null
+    e.stopPropagation()
   }
-    /* 判断点是否在曲线上 */
+  /* 判断点是否在曲线上 */
   isPointInCurve (point) {
     var len = this.curveList.length
     this.ctx.save()
