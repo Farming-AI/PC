@@ -38,7 +38,12 @@
         </el-row>
       </el-col>
       <el-col :span="22" class="canvas-c">
-        <div class="canvas-container" ref="canvasContainer">
+        <div class="canvas-container" ref="canvasContainer"
+          @mousedown="mousedownTarget"
+          @mouseout="mouseoutTarget"
+          @mousemove="mousemoveTarget"
+          @mouseup="mouseupTarget"
+        >
           <div
             class="canvas-actual-layer"
             :class="{'cursor-move': !editing}"
@@ -47,17 +52,14 @@
                 'height': imgBoxH + 'px',
                 'transform': 'scale(' + scale + ',' + scale + ') ' + 'translate3d('+ x / scale + 'px,' + y / scale + 'px,' + '0)'
                 }"
-            @mousedown="mousedownTarget"
-            @mouseout="mouseoutTarget"
-            @mousemove="mousemoveTarget"
-            @mouseup="mouseupTarget"
             @mousewheel="scaleImg"
           >
             <div class="canvas-bg-layer">
               <img :src="img" alt="" style="display:block" ref="bgImg">
             </div>
             <canvas id="canvas-layer" class="canvas" :width="imgBoxW" :height="imgBoxH"></canvas>
-            <canvas id="current-canvas-layer" class="canvas" :width="imgBoxW" :height="imgBoxH"></canvas>
+            <canvas v-show="editing" id="current-canvas-layer" class="canvas current-canvas" :width="imgBoxW" :height="imgBoxH" style="border: 1px solid red"
+            ></canvas>
           </div>
         </div>
       </el-col>
@@ -65,6 +67,7 @@
   </div>
 </template>
 <script>
+  import Curve from 'utils/curve'
   import {fileTransformDataURL, isImage, getFile, autoDownload, dataTransformJSONDataURL} from 'utils/file'
   class Polygon {
     constructor ({ctx, lineWidth = 2, strokeStyle = 'rgba(255, 113, 98, 1)', fillStyle = 'rgba(79, 205, 66, .5)', dotRadius = 3}) {
@@ -158,7 +161,7 @@
         canvas: '',
         ctx: '',
         currentCanvas: '',
-        currentCtx: '',
+        currentDrawing: '',
         moving: false,
         scale: 1,
         editing: false,
@@ -233,8 +236,30 @@
         this.currentCanvas = document.getElementById('current-canvas-layer')
         this.currentCtx = this.currentCanvas.getContext('2d')
       },
+      startMove (startX, startY) {
+        this.moving = true
+        this.moveX = startX - this.x
+        this.moveY = startY - this.y
+      },
+      move (nowX, nowY, vue) {
+        this.moving && vue.$nextTick(() => {
+          this.x = ~~(nowX - this.moveX)
+          this.y = ~~(nowY - this.moveY)
+        })
+      },
+      endMove () {
+        this.moving = false
+      },
       clickEdit () {
         this.editing = !this.editing
+        if (this.editing) this.createCurrentCanvas()
+      },
+      createCurrentCanvas () {
+        if (!this.currentDrawing) {
+          this.currentDrawing = new Curve({
+            el: this.currentCanvas
+          })
+        }
       },
       getJSON () {
         let data = []
@@ -280,24 +305,24 @@
           this.reStroke()
         }
       },
+      mousedownTarget1 (e) {
+        console.log(2)
+        e.stopPropagation()
+      },
       mousedownTarget (e) {
+/*
+        if (this.editing) return
+*/
         e.preventDefault()
-        let offsetX = e.offsetX
-        let offsetY = e.offsetY
-        if (!this.editing) {
-          let startX = e.clientX
-          let startY = e.clientY
-          this.startMove(startX, startY)
-        } else {
-          if (this.currentPolygon) {
-            this.drawPolygon({offsetX, offsetY})
-          } else {
-            this.createPolygon({offsetX, offsetY})
-          }
-        }
+        let startX = e.clientX
+        let startY = e.clientY
+        this.startMove(startX, startY)
       },
       mouseoutTarget (e) {
+/*
         if (!this.editing) this.endMove()
+*/
+        this.endMove()
       },
       mousemoveTarget (e) {
         e.preventDefault()
@@ -307,20 +332,6 @@
       },
       mouseupTarget (e) {
         this.endMove()
-      },
-      startMove (startX, startY) {
-        this.moving = true
-        this.moveX = startX - this.x
-        this.moveY = startY - this.y
-      },
-      move (nowX, nowY, vue) {
-        this.moving && vue.$nextTick(() => {
-          this.x = ~~(nowX - this.moveX)
-          this.y = ~~(nowY - this.moveY)
-        })
-      },
-      endMove () {
-        this.moving = false
       }
     }
   }
@@ -368,9 +379,13 @@
     margin: auto;
     overflow: hidden;
     background-image: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQAQMAAAAlPW0iAAAAA3NCSVQICAjb4U/gAAAABlBMVEXMzMz////TjRV2AAAACXBIWXMAAArrAAAK6wGCiw1aAAAAHHRFWHRTb2Z0d2FyZQBBZG9iZSBGaXJld29ya3MgQ1M26LyyjAAAABFJREFUCJlj+M/AgBVhF/0PAH6/D/HkDxOGAAAAAElFTkSuQmCC');
+    cursor: move;
   }
   .canvas-actual-layer {
-    position: relative;
+    position: absolute;
+  }
+  .current-canvas {
+    cursor: pointer;
   }
   .canvas {
     position: absolute;

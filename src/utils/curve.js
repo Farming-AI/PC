@@ -190,7 +190,7 @@ class Curve {
     /* 鼠标事件 */
   mouseDown (e) {
     this.isMouseDown = true
-    var clickCoord = [e.clientX, e.clientY]
+    var clickCoord = [e.offsetX, e.offsetY]
     var num = this.getClickPointInd(clickCoord)
     if (num !== false) { // 判断点击是否在点集合的点范围内，此时不可增加点
       var point = this.pointArr[num]
@@ -255,3 +255,4 @@ class Curve {
   }
 
 }
+export default Curve

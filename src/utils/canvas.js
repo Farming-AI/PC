@@ -1,4 +1,4 @@
-//:todo canvas 抽象未完待续a
+//:todo canvas 抽象未完待续
 let RAF = (function(){
   return window.requestAnimationFrame || window.webkitRequestAnimationFrame || window.mozRequestAnimationFrame || window.oRequestAnimationFrame || window.msRequestAnimationFrame || function (callback) {window.setTimeout(callback, 1000 / 60); };
 })()

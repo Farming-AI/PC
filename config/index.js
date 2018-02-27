@@ -4,8 +4,8 @@ var path = require('path')
 module.exports = {
   build: {
     env: require('./prod.env'),
-    index: path.resolve(__dirname, '../../../agri_bpmn_v3/trunk/public/AI/index.html'),
-    assetsRoot: path.resolve(__dirname, '../../../agri_bpmn_v3/trunk/public/AI'),
+    index: path.resolve(__dirname, '../../../../agri_bpmn_v3/trunk/public/AI/index.html'),
+    assetsRoot: path.resolve(__dirname, '../../../../agri_bpmn_v3/trunk/public/AI'),
     assetsSubDirectory: 'static',
     assetsPublicPath: '/public/AI/',
     productionSourceMap: true,
