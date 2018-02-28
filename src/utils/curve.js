@@ -29,11 +29,11 @@ function getCurveList (arr, a = 0.15, b = 0.15) { // 获取曲线数组
   })
   return list
 }
-function setCurvePath (list, ctx) { // 设置完整曲线路径
+function setCurvePath (list, ctx, isClosed) { // 设置完整曲线路径
   ctx.beginPath()
   ctx.moveTo(list[0][0][0], list[0][0][1])
   list.forEach((x, y) => {
-    if (!this.isClosed && (y === 0 || y === list.length - 1)) {
+    if (isClosed && (y === 0 || y === list.length - 1)) {
       ctx.lineTo(x[3][0], x[3][1])
     } else {
       setCurvefragment(x, ctx)
@@ -48,9 +48,9 @@ function drawCurvePath (arr, ctx, option = {}) { // 直接绘制曲线路径,可
   }
   setCurvePath(list, ctx)
   ctx.stroke()
-  if (option.unfill !== true) {
+  /* if (option.unfill !== true) {
     ctx.fill()
-  }
+  } */
   ctx.restore()
 }
 class Curve {
@@ -163,14 +163,14 @@ class Curve {
       this.paintPolyLine(this.pointArr)
     } else {
       this.curveList = getCurveList(this.pointArr).filter((x, y, z) => y !== z.length - 1)
-      setCurvePath(this.curveList)
+      setCurvePath(this.curveList, this.ctx, this.isClosed)
       this.ctx.stroke()
     }
   }
   reDrawAtClosedDot () { // 在闭合时的重绘操作
     this.ctx.save()
     this.pointArr.forEach(point => this.paintPoint(point))
-    setCurvePath(this.curveList)
+    setCurvePath(this.curveList, this.ctx, this.isClosed)
     this.ctx.stroke()
     if (this.isFill) {
       if (this.fillColor) { this.ctx.fillStyle = this.fillColor }
@@ -279,7 +279,7 @@ class Curve {
       this.ctx.beginPath()
       this.ctx.lineWidth = 3
       this.ctx.moveTo(list[0][0], list[0][1])
-      setCurvefragment(list)
+      setCurvefragment(list, this.ctx)
       this.ctx.closePath()
       if (this.ctx.isPointInStroke(point[0], point[1])) {
         this.ctx.restore()
