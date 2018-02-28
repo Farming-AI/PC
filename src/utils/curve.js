@@ -33,7 +33,7 @@ function setCurvePath (list, ctx, isClosed) { // 设置完整曲线路径
   ctx.beginPath()
   ctx.moveTo(list[0][0][0], list[0][0][1])
   list.forEach((x, y) => {
-    if (isClosed && (y === 0 || y === list.length - 1)) {
+    if (!isClosed && (y === 0 || y === list.length - 1)) {
       ctx.lineTo(x[3][0], x[3][1])
     } else {
       setCurvefragment(x, ctx)
@@ -48,10 +48,19 @@ function drawCurvePath (arr, ctx, option = {}) { // 直接绘制曲线路径,可
   }
   setCurvePath(list, ctx)
   ctx.stroke()
-  /* if (option.unfill !== true) {
-    ctx.fill()
-  } */
+  ctx.fill()
   ctx.restore()
+}
+function isPointInCurveArea (point, arr, ctx) { // point 选中的点 arr绘制曲线的点集合
+  var list = getCurveList(arr)
+  var len = list.length
+  ctx.beginPath()
+  ctx.moveTo(list[0][0][0], list[0][0][1])
+  for (var i = 0; i < len; i++) {
+    setCurvefragment(list, ctx)
+  }
+  ctx.closePath()
+  return ctx.isPointInPath(point[0], point[1])
 }
 class Curve {
   constructor (option = {}) {
@@ -72,9 +81,6 @@ class Curve {
       this.ctx.strokeStyle = this.polyLineStrokeColor
     }
     this.init()
-    if (!option.offEvent) { // 如果不需要内置的鼠标事件, 设置offEvent为true
-      this.addEvent()
-    }
   }
   init () {
     this.isMouseDown = false
@@ -84,14 +90,13 @@ class Curve {
     this.newPointIndexAtClosed = null // 闭合后新增的点的索引
     this.reDraw()
   }
-  addEvent () { // 添加鼠标事件
-    if (this.el) {
-      this.el.addEventListener('mousedown', this.mouseDown.bind(this))
-      this.el.addEventListener('mousemove', this.mouseMove.bind(this))
-      this.el.addEventListener('mouseup', this.mouseUp.bind(this))
-    }
-  }
   /* 画布操作 */
+  clear () { // 清空当前的Curve
+    this.empty()
+    this.pointArr = []
+    this.isClosed = false
+    this.init()
+  }
   empty () {
     var canvasStyle = window.getComputedStyle(this.el)
     this.ctx.clearRect(0, 0, canvasStyle.width.replace('px', ''), canvasStyle.height.replace('px', ''))
@@ -139,7 +144,7 @@ class Curve {
     this.reDraw()
   }
   reDraw (cb) { // 重绘, 完成后可执行传入的回调
-    if (!this.el) { return }
+    if (!this.el || this.pointArr.length === 0) { return }
     this.empty()
     var ctx = this.ctx
     ctx.save()
@@ -218,7 +223,7 @@ class Curve {
     return Math.pow(num, k)
   }
   /* 鼠标事件 */
-  mouseDown (e, cb) { // 接收回调在重绘后执行
+  curveMouseDown (e) { // 响应鼠标点击
     this.isMouseDown = true
     var clickCoord = [e.offsetX, e.offsetY]
     var num = this.getClickPointInd(clickCoord, this.pointArr)
@@ -229,27 +234,28 @@ class Curve {
         oldPoint: [point[0], point[1]],
         clickCoord
       }
-    } else if (!this.isClosed) { // 未闭合的情况下,直接增加
-      this.add(clickCoord)
-      cb && cb()
-    } else { // 闭合的情况下,判断点是否在曲线上
-      var ind = this.isPointInCurve(clickCoord)
-      if (ind !== false) { // 增加点
-        var len = this.pointArr.length
-        this.newPointIndexAtClosed = ind + 1// 新增点的索引位置
-        if (ind + 1 === len) {
-          this.pointArr.push(clickCoord)
-        } else {
-          this.pointArr.splice((ind + 1) % len, 0, clickCoord)
-        }
-        this.curveList = getCurveList(this.pointArr)
-      }
-      this.reDraw()
-      cb && cb()
+      return
     }
-    e.stopPropagation()
+    if (!this.isClosed) { // 未闭合的情况下,直接增加
+      this.add(clickCoord)
+      return
+    }
+    // 闭合的情况下,判断点是否在曲线上
+    var ind = this.isPointInCurve(clickCoord)
+    if (ind !== false) { // 增加点在曲线上
+      var len = this.pointArr.length
+      this.newPointIndexAtClosed = ind + 1// 新增点的索引位置
+      if (ind + 1 === len) {
+        this.pointArr.push(clickCoord)
+      } else {
+        this.pointArr.splice((ind + 1) % len, 0, clickCoord)
+      }
+      this.curveList = getCurveList(this.pointArr)
+      this.reDraw()
+      return
+    }
   }
-  mouseMove (e, cb) {
+  curveMouseMove (e) {
     if (this.isMouseDown && this.selPoint !== null) { // 此时需要移动点
       var mouseDownCoord = this.selPoint.clickCoord
       var index = this.selPoint.index
@@ -257,18 +263,15 @@ class Curve {
       var y = e.offsetY - mouseDownCoord[1]
       var obj = this.selPoint.oldPoint
       this.pointArr[index] = [obj[0] + x, obj[1] + y]
-          // 获取新的曲线数组
+      // 获取新的曲线数组
       this.curveList = getCurveList(this.pointArr)
-          // 重绘
+      // 重绘
       this.reDraw()
-      cb && cb()
-      e.stopPropagation()
     }
   }
-  mouseUp (e) {
+  curveMouseUp () {
     this.isMouseDown = false
     this.selPoint = null
-    e.stopPropagation()
   }
   /* 判断点是否在曲线上 */
   isPointInCurve (point) {
@@ -295,5 +298,6 @@ export {
   setCurvefragment,
   setCurvePath,
   getCurveList,
+  isPointInCurveArea,
   drawCurvePath
 }
