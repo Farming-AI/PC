@@ -294,5 +294,6 @@ export {
   Curve,
   setCurvefragment,
   setCurvePath,
+  getCurveList,
   drawCurvePath
 }
