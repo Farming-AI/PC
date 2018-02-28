@@ -40,7 +40,7 @@ function setCurvePath (list, ctx, isClosed) { // 设置完整曲线路径
     }
   })
 }
-function drawCurvePath (arr, ctx, option = {}) { // 直接绘制曲线路径,可直接使用
+function drawCurvePath (arr, ctx, option = {fillStyle: 'rgba(179, 205, 65, .5)', strokeStyle: '#ffffff'}) { // 直接绘制曲线路径,可直接使用
   var list = getCurveList(arr)
   ctx.save()
   for (var i in option) {
@@ -291,6 +291,21 @@ class Curve {
     }
     this.ctx.restore()
     return false
+  }
+  isPointInCurveArea (point) {
+    var list = this.curveList
+    var len = list.length
+    console.log(list)
+    this.ctx.beginPath()
+    this.ctx.moveTo(list[0][0][0], list[0][0][1])
+    for (var i = 0; i < len; i++) {
+      setCurvefragment(list, this.ctx)
+    }
+    this.ctx.closePath()
+    this.ctx.stroke()
+    this.ctx.fillStyle = 'red'
+    this.ctx.fill()
+    return this.ctx.isPointInPath(point[0], point[1])
   }
 }
 export {

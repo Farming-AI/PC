@@ -8,9 +8,6 @@
     <el-row class="main-container">
       <el-col :span="2" class="tools">
         <el-row class="tool-item">
-          打点数：{{currentPolygon && currentPolygon.dots.length > 0 ? currentPolygon.dots.length : 0}}
-        </el-row>
-        <el-row class="tool-item">
           <label for="file_input" class="el-button el-tooltip item el-button--default">
             选图
             <input type="file" id="file_input"  @change="selectImg" style="position:absolute;clip:rect(0 0 0 0);left: -1000px;top:0;"/>
@@ -19,21 +16,6 @@
         <el-row class="tool-item">
           <el-tooltip class="item" effect="dark" content="Shift" placement="right-start">
             <el-button @click="clickEdit">状态</el-button>
-          </el-tooltip>
-        </el-row>
-        <el-row class="tool-item">
-          <el-tooltip class="item" effect="dark" content="Ctrl + Space" placement="right-start">
-            <el-button @click="finishPolygon">闭合</el-button>
-          </el-tooltip>
-        </el-row>
-        <el-row class="tool-item">
-          <el-tooltip class="item" effect="dark" content="Ctrl + Z" placement="right-start">
-            <el-button @click="retract">返回</el-button>
-          </el-tooltip>
-        </el-row>
-        <el-row class="tool-item">
-          <el-tooltip class="item" effect="dark" content="Ctrl + D" placement="right-start">
-            <el-button @click="getJSON">导出</el-button>
           </el-tooltip>
         </el-row>
       </el-col>
@@ -57,8 +39,13 @@
             <div class="canvas-bg-layer">
               <img :src="img" alt="" style="display:block" ref="bgImg">
             </div>
-            <canvas id="canvas-layer" class="canvas" :width="imgBoxW" :height="imgBoxH"></canvas>
-            <canvas v-show="editing" id="current-canvas-layer" class="canvas current-canvas" :width="imgBoxW" :height="imgBoxH" style="border: 1px solid red"
+            <canvas ref="displayCanvas" id="canvas-layer" class="canvas" :width="imgBoxW" :height="imgBoxH"></canvas>
+            <canvas v-show="editing" ref="paintCanvas" id="current-canvas-layer" class="canvas current-canvas" :width="imgBoxW" :height="imgBoxH" style="border: 1px solid red"
+              @mousewheel="scaleImg"
+              @mousedown="mousedownPaint"
+              @mouseout="mouseoutPaint"
+              @mousemove="mousemovePaint"
+              @mouseup="mouseupPaint"
             ></canvas>
           </div>
         </div>
@@ -67,81 +54,8 @@
   </div>
 </template>
 <script>
-  import Curve from 'utils/curve'
+  import {Curve, isPointInCurveArea, drawCurvePath} from 'utils/curve'
   import {fileTransformDataURL, isImage, getFile, autoDownload, dataTransformJSONDataURL} from 'utils/file'
-  class Polygon {
-    constructor ({ctx, lineWidth = 2, strokeStyle = 'rgba(255, 113, 98, 1)', fillStyle = 'rgba(79, 205, 66, .5)', dotRadius = 3}) {
-      this.ctx = ctx
-      this.dotRadius = dotRadius
-      this.strokeStyle = strokeStyle
-      this.lineWidth = lineWidth
-      this.fillStyle = fillStyle
-      this.dots = []
-      this.startX = ''
-      this.startY = ''
-      this.lastX = ''
-      this.lastY = ''
-    }
-    startDraw ({x, y}) {
-      this.startX = x
-      this.startY = y
-      this.lastX = x
-      this.lastY = y
-      this.dots.push({x, y})
-      this.ctx.beginPath()
-      this.ctx.fillStyle = this.strokeStyle
-      this.ctx.lineWidth = 1
-      this.ctx.arc(x, y, this.dotRadius, 0, Math.PI * 2)
-      this.ctx.fill()
-    }
-    stroke ({x, y}) {
-      this.ctx.beginPath()
-      this.ctx.strokeStyle = this.strokeStyle
-      this.ctx.lineWidth = this.lineWidth
-      this.ctx.moveTo(this.lastX, this.lastY)
-      this.ctx.lineTo(x, y)
-      this.ctx.stroke()
-      this.dots.push({x, y})
-      this.lastX = x
-      this.lastY = y
-    }
-    filling () {
-      this.ctx.fillStyle = this.fillStyle
-      this.ctx.strokeStyle = 'transparent'
-      this.ctx.lineWidth = 1
-      this.ctx.beginPath()
-      this.ctx.moveTo(this.startX, this.startY)
-      this.dots.forEach((dot, index) => {
-        if (index === 0) return false
-        this.ctx.lineTo(dot.x, dot.y)
-      })
-      this.ctx.closePath()
-      this.ctx.fill()
-    }
-    reStroke () {
-      this.dots.pop()
-      this.lastX = this.startX
-      this.lastY = this.startY
-      this.ctx.beginPath()
-      this.ctx.fillStyle = this.strokeStyle
-      this.ctx.lineWidth = 1
-      this.ctx.arc(this.startX, this.startY, this.dotRadius, 0, Math.PI * 2)
-      this.ctx.fill()
-      this.ctx.beginPath()
-      this.ctx.strokeStyle = this.strokeStyle
-      this.ctx.lineWidth = this.lineWidth
-      this.ctx.moveTo(this.startX, this.startY)
-      this.dots.forEach((dot, index) => {
-        if (index === 0) return false
-        this.ctx.lineTo(dot.x, dot.y)
-      })
-      this.ctx.stroke()
-      if (this.dots.length > 0) {
-        this.lastX = this.dots[this.dots.length - 1].x
-        this.lastY = this.dots[this.dots.length - 1].y
-      }
-    }
-  }
   export default {
     name: 'polygon',
     data: () => {
@@ -156,18 +70,18 @@
         y: 0,
         moveX: 0,
         moveY: 0,
-        polygons: [],
-        currentPolygon: '',
-        canvas: '',
-        ctx: '',
-        currentCanvas: '',
-        currentDrawing: '',
         moving: false,
         scale: 1,
         editing: false,
-        retractCount: 0,
         img: '',
-        file: ''
+        file: '',
+        polygons: [],
+        paintCanvas: {
+          isPaint: true,
+          isClosePath: true,
+          curve: null
+        },
+        displayCanvas: ''
       }
     },
     components: {},
@@ -175,25 +89,26 @@
     created () {},
     beforeMount () {},
     mounted () {
-      let _this = this
-      _this.$nextTick(() => {
-        _this.canvasContainerW = ~~(window.getComputedStyle(_this.$refs.canvasContainer).width.replace('px', ''))
-        _this.canvasContainerH = ~~(window.getComputedStyle(_this.$refs.canvasContainer).height.replace('px', ''))
-        _this.getCanvas()
+      this.$nextTick(() => {
+        this.canvasContainerW = ~~(window.getComputedStyle(this.$refs.canvasContainer).width.replace('px', ''))
+        this.canvasContainerH = ~~(window.getComputedStyle(this.$refs.canvasContainer).height.replace('px', ''))
+        this.getCanvas()
       })
-      _this.$refs.bgImg.onload = () => {
-        _this.imgBoxW = _this.$refs.bgImg.width
-        _this.imgBoxH = _this.$refs.bgImg.height
-        if (_this.imgBoxW > _this.canvasContainerW) _this.scale = _this.canvasContainerW / _this.imgBoxW
-        if (_this.imgBoxH * _this.scale > _this.canvasContainerH) _this.scale = _this.canvasContainerH / _this.imgBoxH
-        _this.x = (_this.canvasContainerW - _this.imgBoxW) / 2
-        _this.y = (_this.canvasContainerH - _this.imgBoxH) / 2
+      this.$refs.bgImg.onload = () => {
+        this.getImgPosition()
       }
+      let _this = this
       document.onkeydown = function (e) {
         e.preventDefault()
-        if (e && (e.ctrlKey || e.metaKey) && (e.keyCode === 32 || e.keyCode === 8)) _this.finishPolygon()
+        if (e && (e.ctrlKey || e.metaKey) && (e.keyCode === 32 || e.keyCode === 8)) {
+          if (_this.paintCanvas.isClosePath) {
+            _this.paintCanvas.curve.closePath()
+          }
+          _this.paintCanvas.isPaint = false
+          _this.paintCanvas.isClosePath = false
+        }
         if (e && (e.ctrlKey || e.metaKey) && e.keyCode === 68) _this.getJSON()
-        if (e && (e.ctrlKey || e.metaKey) && e.keyCode === 90) _this.retract()
+        if (e && (e.ctrlKey || e.metaKey) && e.keyCode === 90) _this.currentDrawing.withDraw()
         if (e && e.key === 'Shift' || e.keyCode === 16) _this.clickEdit()
       }
     },
@@ -202,14 +117,23 @@
     beforeDestroy () {},
     destroyed () {},
     methods: {
+      getImgPosition () {
+        this.imgBoxW = this.$refs.bgImg.width
+        this.imgBoxH = this.$refs.bgImg.height
+        if (this.imgBoxW > this.canvasContainerW) this.scale = this.canvasContainerW / this.imgBoxW
+        if (this.imgBoxH * this.scale > this.canvasContainerH) this.scale = this.canvasContainerH / this.imgBoxH
+        this.x = (this.canvasContainerW - this.imgBoxW) / 2
+        this.y = (this.canvasContainerH - this.imgBoxH) / 2
+      },
+      ctrlDeleteToFill (e) {
+      },
       selectImg (e) {
         this.initCanvas()
         this.previewImg(e)
       },
       initCanvas () {
-        this.ctx && this.clearRect()
+        this.paintCanvas.curve && this.clearRect()
         this.polygons = []
-        this.currentPolygon = ''
         this.scale = 1
       },
       previewImg (e) {
@@ -231,10 +155,7 @@
         num < 0 ? this.scale += Math.abs(num) : this.scale > Math.abs(num) ? this.scale -= Math.abs(num) : this.scale
       },
       getCanvas () {
-        this.canvas = document.getElementById('canvas-layer')
-        this.ctx = this.canvas.getContext('2d')
-        this.currentCanvas = document.getElementById('current-canvas-layer')
-        this.currentCtx = this.currentCanvas.getContext('2d')
+        this.displayCanvas = document.getElementById('canvas-layer').getContext('2d')
       },
       startMove (startX, startY) {
         this.moving = true
@@ -255,9 +176,9 @@
         if (this.editing) this.createCurrentCanvas()
       },
       createCurrentCanvas () {
-        if (!this.currentDrawing) {
-          this.currentDrawing = new Curve({
-            el: this.currentCanvas
+        if (!this.paintCanvas.curve) {
+          this.paintCanvas.curve = new Curve({
+            el: this.$refs.paintCanvas
           })
         }
       },
@@ -271,57 +192,15 @@
         autoDownload({dataURL, filename})
       },
       clearRect () {
-        this.ctx.clearRect(0, 0, this.imgBoxW, this.imgBoxH)
-      },
-      createPolygon ({offsetX, offsetY}) {
-        this.currentPolygon = new Polygon({ctx: this.ctx})
-        this.currentPolygon.startDraw({x: offsetX, y: offsetY})
-      },
-      drawPolygon ({offsetX, offsetY}) {
-        this.currentPolygon.stroke({x: offsetX, y: offsetY})
-      },
-      finishPolygon () {
-        if (this.editing && this.currentPolygon) {
-          this.clearRect()
-          this.reFill()
-          this.currentPolygon.filling()
-          this.polygons.push(this.currentPolygon)
-          this.currentPolygon = ''
-        }
-      },
-      reFill () {
-        this.polygons.forEach((polygon, index) => {
-          polygon.filling()
-        })
-      },
-      reStroke () {
-        if (this.currentPolygon.dots.length > 0) this.currentPolygon.reStroke()
-        else this.currentPolygon = ''
-      },
-      retract () {
-        if (this.editing && this.currentPolygon) {
-          this.clearRect()
-          this.reFill()
-          this.reStroke()
-        }
-      },
-      mousedownTarget1 (e) {
-        console.log(2)
-        e.stopPropagation()
+        this.paintCanvas.curve.empty()
       },
       mousedownTarget (e) {
-/*
-        if (this.editing) return
-*/
         e.preventDefault()
         let startX = e.clientX
         let startY = e.clientY
         this.startMove(startX, startY)
       },
       mouseoutTarget (e) {
-/*
-        if (!this.editing) this.endMove()
-*/
         this.endMove()
       },
       mousemoveTarget (e) {
@@ -332,6 +211,62 @@
       },
       mouseupTarget (e) {
         this.endMove()
+      },
+      mousedownPaint (e) {
+        if (this.paintCanvas.isPaint) {
+          this.paintCanvas.curve.curveMouseDown(e)
+        } else {
+          let x = e.offsetX
+          let y = e.offsetY
+          let clickIndex = -1
+          if (this.paintCanvas.curve.isPointInCurveArea([x, y])) {
+            this.paintCanvas.isPaint = true
+            this.paintCanvas.curve.curveMouseDown(e)
+          } else {
+            this.polygons.forEach((item, index) => {
+              if (isPointInCurveArea([x, y], item, this.displayCanvas)) clickIndex = index
+            })
+            if (clickIndex >= 0) {
+              this.paintCanvas.curve.replace(this.polygons[clickIndex])
+              this.paintCanvas.isClosePath = false
+              this.paintCanvas.isPaint = true
+              this.displayCanvas.clearRect(0, 0, this.imgBoxW, this.imgBoxW)
+              this.polygons.splice(clickIndex, 1)
+              this.polygons.forEach((item, index) => {
+                drawCurvePath(item, this.displayCanvas)
+              })
+              this.paintCanvas.curve.curveMouseDown(e)
+            } else {
+              let arr = this.paintCanvas.curve.getPointList()
+              this.paintCanvas.isClosePath = true
+              this.paintCanvas.isPaint = true
+              if (arr.length > 0) {
+                this.polygons.push(arr)
+                this.displayCanvas.clearRect(0, 0, this.imgBoxW, this.imgBoxW)
+                this.polygons.forEach((item, index) => {
+                  drawCurvePath(item, this.displayCanvas)
+                })
+              }
+              this.paintCanvas.curve.clear()
+              this.paintCanvas.curve.curveMouseDown(e)
+            }
+          }
+        }
+        e.stopPropagation()
+      },
+      mouseoutPaint (e) {
+      },
+      mousemovePaint (e) {
+        if (this.paintCanvas.isPaint) {
+          this.paintCanvas.curve.curveMouseMove(e)
+        }
+        e.stopPropagation()
+      },
+      mouseupPaint (e) {
+        if (this.paintCanvas.isPaint) {
+          this.paintCanvas.curve.curveMouseUp(e)
+        }
+        e.stopPropagation()
       }
     }
   }

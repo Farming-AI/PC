@@ -23,7 +23,7 @@
         </el-col>
         <el-col :span="22">
           <el-row :gutter="20">
-            <el-col :span="4" class="result-item" v-for="result in results">
+            <el-col :span="4" class="result-item" v-for="result in results" :key="index">
               <img :src="result.url" alt="" class="result-img">
               <span class="result-text">{{result.name}}：{{result.score}}</span>
             </el-col>
