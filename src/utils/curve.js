@@ -1,3 +1,58 @@
+function setCurvefragment (arr = [], ctx) { // 设置曲线路径片段
+  var p0 = arr[1]
+  var p1 = arr[2]
+  ctx.bezierCurveTo(p0[0], p0[1], p1[0], p1[1], arr[3][0], arr[3][1])
+}
+function getCurveList (arr, a = 0.15, b = 0.15) { // 获取曲线数组
+  if (arr.length < 3) { //
+    return arr
+  }
+  var list = []
+  var len = arr.length
+  for (var i = 0; i < len; i++) {
+    list[i] = []
+    list[i].push(arr[(i - 1) < 0 ? len - 1 : i - 1])
+    list[i].push(arr[i % len])
+    list[i].push(arr[(i + 1) % len])
+    list[i].push(arr[(i + 2) % len])
+  }
+  list = list.map(arr => {
+    var p0 = [
+      arr[1][0] + a * (arr[2][0] - arr[0][0]),
+      arr[1][1] + a * (arr[2][1] - arr[0][1])
+    ]
+    var p1 = [
+      arr[2][0] - b * (arr[3][0] - arr[1][0]),
+      arr[2][1] - b * (arr[3][1] - arr[1][1])
+    ]
+    return [arr[1], p0, p1, arr[2]]
+  })
+  return list
+}
+function setCurvePath (list, ctx) { // 设置完整曲线路径
+  ctx.beginPath()
+  ctx.moveTo(list[0][0][0], list[0][0][1])
+  list.forEach((x, y) => {
+    if (!this.isClosed && (y === 0 || y === list.length - 1)) {
+      ctx.lineTo(x[3][0], x[3][1])
+    } else {
+      setCurvefragment(x, ctx)
+    }
+  })
+}
+function drawCurvePath (arr, ctx, option = {}) { // 直接绘制曲线路径,可直接使用
+  var list = getCurveList(arr)
+  ctx.save()
+  for (var i in option) {
+    ctx[i] = option[i]
+  }
+  setCurvePath(list, ctx)
+  ctx.stroke()
+  if (option.unfill !== true) {
+    ctx.fill()
+  }
+  ctx.restore()
+}
 class Curve {
   constructor (option = {}) {
     this.pointArr = option.pointArr || [] // 存放点的数组
@@ -6,8 +61,8 @@ class Curve {
     this.pointColor = option.pointColor || 'orange'
     this.pointSize = option.pointSize || 3
     this.polyLineStrokeColor = option.polyLineStrokeColor || 'red'
-    this.polyLineSize = option.polyLineSize || 3
-    this.fillColor = option.fillColor
+    this.polyLineSize = option.polyLineSize || 1
+    this.fillColor = option.fillColor || 'rgba(79, 205, 65, .5)'
     this.isFill = option.isFill || true
     var el = option.el // canvas元素
     if (el) {
@@ -61,64 +116,8 @@ class Curve {
     }
     ctx.stroke()
   }
-  setCurvefragment (arr = [], ctx) { // 设置曲线路径片段
-    var p0 = arr[1]
-    var p1 = arr[2]
-    ctx = ctx || this.ctx
-    ctx.bezierCurveTo(p0[0], p0[1], p1[0], p1[1], arr[3][0], arr[3][1])
-  }
-  getCurveList (arr, a = 0.15, b = 0.15) { // 获取曲线数组
-    if (arr.length < 3) { //
-      return arr
-    }
-    var list = []
-    var len = arr.length
-    for (var i = 0; i < len; i++) {
-      list[i] = []
-      list[i].push(arr[(i - 1) < 0 ? len - 1 : i - 1])
-      list[i].push(arr[i % len])
-      list[i].push(arr[(i + 1) % len])
-      list[i].push(arr[(i + 2) % len])
-    }
-    list = list.map(arr => {
-      var p0 = [
-        arr[1][0] + a * (arr[2][0] - arr[0][0]),
-        arr[1][1] + a * (arr[2][1] - arr[0][1])
-      ]
-      var p1 = [
-        arr[2][0] - b * (arr[3][0] - arr[1][0]),
-        arr[2][1] - b * (arr[3][1] - arr[1][1])
-      ]
-      return [arr[1], p0, p1, arr[2]]
-    })
-    return list
-  }
-  setCurvePath (list, ctx) { // 设置完整曲线路径
-    ctx = ctx || this.ctx
-    ctx.beginPath()
-    ctx.moveTo(list[0][0][0], list[0][0][1])
-    list.forEach((x, y) => {
-      if (y === 0 || y === list.length - 1) {
-        this.ctx.lineTo(x[3][0], x[3][1])
-      } else {
-        this.setCurvefragment(x, ctx)
-      }
-    })
-  }
-  drawCurvePath (arr, ctx, option = {}) { // 直接绘制曲线路径,可直接使用
-    var list = this.getCurveList(arr)
-    ctx.save()
-    for (var i in option) {
-      ctx[i] = option[i]
-    }
-    this.setCurvePath(list, ctx)
-    ctx.stroke()
-    if (this.isFill) {
-      ctx.fill()
-    }
-    ctx.restore()
-  }
-  withDraw (point) { // 撤回
+
+  withDraw () { // 撤回
     if (this.pointArr.length <= 3 && this.isClosed) { // 当点少于3且是闭合状态时操作无效
       return
     }
@@ -127,18 +126,32 @@ class Curve {
     } else {
       this.pointArr.splice(this.newPointIndexAtClosed, 1)
     }
-    this.curveList = this.getCurveList(this.pointArr)
+    this.curveList = getCurveList(this.pointArr)
     // 重绘
+    this.reDraw()
+  }
+  changePointSize (num) { // 修改点的尺寸
+    this.pointSize += num
+    this.reDraw()
+  }
+  changeLineSize (num) {
+    this.polyLineSize += num
     this.reDraw()
   }
   reDraw (cb) { // 重绘, 完成后可执行传入的回调
     if (!this.el) { return }
     this.empty()
+    var ctx = this.ctx
+    ctx.save()
+    if (this.polyLineSize) {
+      ctx.lineWidth = this.polyLineSize
+    }
     if (!this.isClosed || this.pointArr.length < 3) {
       this.reDrawAtDrawingDot()
     } else {
       this.reDrawAtClosedDot()
     }
+    ctx.restore()
     cb && cb()
   }
   reDrawAtDrawingDot () { // 在描点时的重绘操作
@@ -149,15 +162,15 @@ class Curve {
     if (len < 3) {
       this.paintPolyLine(this.pointArr)
     } else {
-      this.curveList = this.getCurveList(this.pointArr).filter((x, y, z) => y !== z.length - 1)
-      this.setCurvePath(this.curveList)
+      this.curveList = getCurveList(this.pointArr).filter((x, y, z) => y !== z.length - 1)
+      setCurvePath(this.curveList)
       this.ctx.stroke()
     }
   }
   reDrawAtClosedDot () { // 在闭合时的重绘操作
     this.ctx.save()
     this.pointArr.forEach(point => this.paintPoint(point))
-    this.setCurvePath(this.curveList)
+    setCurvePath(this.curveList)
     this.ctx.stroke()
     if (this.isFill) {
       if (this.fillColor) { this.ctx.fillStyle = this.fillColor }
@@ -167,13 +180,14 @@ class Curve {
   }
   closePath () { // 闭合所有的点路径
     this.isClosed = true
-    this.curveList = this.getCurveList(this.pointArr)
+    this.curveList = getCurveList(this.pointArr)
     this.reDraw()
   }
   getClickPointInd (clickCoord, points = this.pointArr) { // 判断是否点击在点上
     var len = points.length
+    var limitR = Math.max(this.pointSize, 5)
     for (var i = 0; i < len; i++) {
-      if (this.getPointDistance(points[i], clickCoord) <= this.pointSize) { // 在点的范围内
+      if (this.getPointDistance(points[i], clickCoord) <= limitR) { // 在点的范围内
         return i
       }
     }
@@ -187,7 +201,7 @@ class Curve {
   replace (arr, opiton = {}) {
     this.isClosed = opiton.isClosed || true // 默认为直接替换已闭合的
     this.pointArr = arr
-    this.curveList = this.getCurveList(arr)
+    this.curveList = getCurveList(arr)
     this.reDraw()
   }
   getPointList () { // 获取所有的点
@@ -228,7 +242,7 @@ class Curve {
         } else {
           this.pointArr.splice((ind + 1) % len, 0, clickCoord)
         }
-        this.curveList = this.getCurveList(this.pointArr)
+        this.curveList = getCurveList(this.pointArr)
       }
       this.reDraw()
       cb && cb()
@@ -244,7 +258,7 @@ class Curve {
       var obj = this.selPoint.oldPoint
       this.pointArr[index] = [obj[0] + x, obj[1] + y]
           // 获取新的曲线数组
-      this.curveList = this.getCurveList(this.pointArr)
+      this.curveList = getCurveList(this.pointArr)
           // 重绘
       this.reDraw()
       cb && cb()
@@ -265,7 +279,7 @@ class Curve {
       this.ctx.beginPath()
       this.ctx.lineWidth = 3
       this.ctx.moveTo(list[0][0], list[0][1])
-      this.setCurvefragment(list)
+      setCurvefragment(list)
       this.ctx.closePath()
       if (this.ctx.isPointInStroke(point[0], point[1])) {
         this.ctx.restore()
@@ -275,6 +289,11 @@ class Curve {
     this.ctx.restore()
     return false
   }
-
 }
-export default Curve
+export {
+  Curve,
+  setCurvefragment,
+  setCurvePath,
+  getCurveList,
+  drawCurvePath
+}
