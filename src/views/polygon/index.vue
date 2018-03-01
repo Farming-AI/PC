@@ -40,13 +40,19 @@
               <img :src="img" alt="" style="display:block" ref="bgImg">
             </div>
             <canvas ref="displayCanvas" id="canvas-layer" class="canvas" :width="imgBoxW" :height="imgBoxH"></canvas>
-            <canvas v-show="editing" ref="paintCanvas" id="current-canvas-layer" class="canvas current-canvas" :width="imgBoxW" :height="imgBoxH" style="border: 1px solid red"
+            <canvas ref="paintCanvas" id="current-canvas-layer" class="canvas current-canvas" :width="imgBoxW" :height="imgBoxH" style="border: 1px solid red"
               @mousewheel="scaleImg"
               @mousedown="mousedownPaint"
               @mouseout="mouseoutPaint"
               @mousemove="mousemovePaint"
               @mouseup="mouseupPaint"
             ></canvas>
+            <div v-show="!editing" :style="{'width': imgBoxW + 'px', 'height': imgBoxH + 'px'}" style="border: 1px solid green;position: absolute;left: 0;top: 0"
+             @mousedown="mousedownTarget"
+             @mouseout="mouseoutTarget"
+             @mousemove="mousemoveTarget"
+             @mouseup="mouseupTarget"
+            ></div>
           </div>
         </div>
       </el-col>
@@ -77,7 +83,6 @@
         file: '',
         polygons: [],
         paintCanvas: {
-          isPaint: true,
           isClosePath: true,
           curve: null
         },
@@ -100,16 +105,10 @@
       let _this = this
       document.onkeydown = function (e) {
         e.preventDefault()
-        if (e && (e.ctrlKey || e.metaKey) && (e.keyCode === 32 || e.keyCode === 8)) {
-          if (_this.paintCanvas.isClosePath) {
-            _this.paintCanvas.curve.closePath()
-          }
-          _this.paintCanvas.isPaint = false
-          _this.paintCanvas.isClosePath = false
-        }
-        if (e && (e.ctrlKey || e.metaKey) && e.keyCode === 68) _this.getJSON()
-        if (e && (e.ctrlKey || e.metaKey) && e.keyCode === 90) _this.currentDrawing.withDraw()
-        if (e && e.key === 'Shift' || e.keyCode === 16) _this.clickEdit()
+        _this.ctrlDeleteToFill(e)
+        _this.ctrlSToSave(e)
+        _this.ctrlZToRePaint(e)
+        _this.shiftToTransformEdit(e)
       }
     },
     beforeUpdate () {},
@@ -126,6 +125,23 @@
         this.y = (this.canvasContainerH - this.imgBoxH) / 2
       },
       ctrlDeleteToFill (e) {
+        if (e && (e.ctrlKey || e.metaKey) && (e.keyCode === 32 || e.keyCode === 8)) {
+          if (this.paintCanvas.isClosePath) this.paintCanvas.curve.closePath()
+          this.paintCanvas.isClosePath = false
+        }
+      },
+      ctrlSToSave (e) {
+        if (e && (e.ctrlKey || e.metaKey) && e.keyCode === 68) this.getJSON()
+      },
+      ctrlZToRePaint (e) {
+        if (e && (e.ctrlKey || e.metaKey) && e.keyCode === 90) {
+          if (this.paintCanvas.curve && this.paintCanvas.curve.getPointList().length > 0 && !this.paintCanvas.curve.isClosed) {
+            this.paintCanvas.curve.withDraw()
+          }
+        }
+      },
+      shiftToTransformEdit (e) {
+        if (e && e && (e.ctrlKey || e.metaKey) && (e.key === 'Shift' || e.keyCode === 16)) this.clickEdit()
       },
       selectImg (e) {
         this.initCanvas()
@@ -194,6 +210,39 @@
       clearRect () {
         this.paintCanvas.curve.empty()
       },
+      addDisplayPolygon (arr) {
+        if (arr.length <= 0) return
+        this.displayCanvas.clearRect(0, 0, this.imgBoxW, this.imgBoxW)
+        this.polygons.push(arr)
+        this.polygons.forEach((item, index) => {
+          drawCurvePath(item, this.displayCanvas)
+        })
+      },
+      delDisplayPolygon (index) {
+        this.displayCanvas.clearRect(0, 0, this.imgBoxW, this.imgBoxW)
+        this.polygons.splice(index, 1)
+        this.polygons.forEach((item, index) => {
+          drawCurvePath(item, this.displayCanvas)
+        })
+      },
+      isClickOnDisplayCanvas (e) {
+        let x = e.offsetX
+        let y = e.offsetY
+        let obj = {
+          index: -1,
+          item: '',
+          beClick: false
+        }
+        this.polygons.forEach((item, index) => {
+          if (isPointInCurveArea([x, y], item, this.displayCanvas)) {
+            obj.index = index
+            obj.item = item
+            obj.beClick = true
+            return
+          }
+        })
+        return obj
+      },
       mousedownTarget (e) {
         e.preventDefault()
         let startX = e.clientX
@@ -213,42 +262,44 @@
         this.endMove()
       },
       mousedownPaint (e) {
-        if (this.paintCanvas.isPaint) {
-          this.paintCanvas.curve.curveMouseDown(e)
-        } else {
-          let x = e.offsetX
-          let y = e.offsetY
-          let clickIndex = -1
-          if (this.paintCanvas.curve.isPointInCurveArea([x, y])) {
-            this.paintCanvas.isPaint = true
+        let x = e.offsetX
+        let y = e.offsetY
+
+        let polygon = {
+          index: -1,
+          item: '',
+          beClick: false
+        }
+        if (this.paintCanvas.curve.getPointList().length <= 0) {
+          polygon = this.isClickOnDisplayCanvas(e)
+          if (polygon.beClick) {
+            this.delDisplayPolygon(polygon.index)
+            this.paintCanvas.curve.replace(polygon.item)
+            this.paintCanvas.isClosePath = false
             this.paintCanvas.curve.curveMouseDown(e)
           } else {
-            this.polygons.forEach((item, index) => {
-              if (isPointInCurveArea([x, y], item, this.displayCanvas)) clickIndex = index
-            })
-            if (clickIndex >= 0) {
-              this.paintCanvas.curve.replace(this.polygons[clickIndex])
-              this.paintCanvas.isClosePath = false
-              this.paintCanvas.isPaint = true
-              this.displayCanvas.clearRect(0, 0, this.imgBoxW, this.imgBoxW)
-              this.polygons.splice(clickIndex, 1)
-              this.polygons.forEach((item, index) => {
-                drawCurvePath(item, this.displayCanvas)
-              })
+            this.paintCanvas.isClosePath = true
+            this.paintCanvas.curve.curveMouseDown(e)
+          }
+        } else {
+          if (!this.paintCanvas.curve.isClosed) {
+            this.paintCanvas.curve.curveMouseDown(e)
+          } else {
+            if (this.paintCanvas.curve.isPointInCurveArea([x, y])) {
               this.paintCanvas.curve.curveMouseDown(e)
             } else {
-              let arr = this.paintCanvas.curve.getPointList()
-              this.paintCanvas.isClosePath = true
-              this.paintCanvas.isPaint = true
-              if (arr.length > 0) {
-                this.polygons.push(arr)
-                this.displayCanvas.clearRect(0, 0, this.imgBoxW, this.imgBoxW)
-                this.polygons.forEach((item, index) => {
-                  drawCurvePath(item, this.displayCanvas)
-                })
+              this.addDisplayPolygon(this.paintCanvas.curve.getPointList())
+              polygon = this.isClickOnDisplayCanvas(e)
+              if (polygon.beClick) {
+                this.delDisplayPolygon(polygon.index)
+                this.paintCanvas.curve.replace(polygon.item)
+                this.paintCanvas.isClosePath = false
+                this.paintCanvas.curve.curveMouseDown(e)
+              } else {
+                this.paintCanvas.isClosePath = true
+                this.paintCanvas.curve.clear()
+                this.paintCanvas.curve.curveMouseDown(e)
               }
-              this.paintCanvas.curve.clear()
-              this.paintCanvas.curve.curveMouseDown(e)
             }
           }
         }
@@ -257,15 +308,11 @@
       mouseoutPaint (e) {
       },
       mousemovePaint (e) {
-        if (this.paintCanvas.isPaint) {
-          this.paintCanvas.curve.curveMouseMove(e)
-        }
+        this.paintCanvas.curve.curveMouseMove(e)
         e.stopPropagation()
       },
       mouseupPaint (e) {
-        if (this.paintCanvas.isPaint) {
-          this.paintCanvas.curve.curveMouseUp(e)
-        }
+        this.paintCanvas.curve.curveMouseUp(e)
         e.stopPropagation()
       }
     }
