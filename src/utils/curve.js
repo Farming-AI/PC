@@ -46,7 +46,7 @@ function drawCurvePath (arr, ctx, option = {fillStyle: 'rgba(179, 205, 65, .5)',
   for (var i in option) {
     ctx[i] = option[i]
   }
-  setCurvePath(list, ctx)
+  setCurvePath(list, ctx, true)
   ctx.stroke()
   ctx.fill()
   ctx.restore()
@@ -57,7 +57,7 @@ function isPointInCurveArea (point, arr, ctx) { // point 选中的点 arr绘制�
   ctx.beginPath()
   ctx.moveTo(list[0][0][0], list[0][0][1])
   for (var i = 0; i < len; i++) {
-    setCurvefragment(list, ctx)
+    setCurvefragment(list[i], ctx)
   }
   ctx.closePath()
   return ctx.isPointInPath(point[0], point[1])
@@ -228,12 +228,7 @@ class Curve {
     var clickCoord = [e.offsetX, e.offsetY]
     var num = this.getClickPointInd(clickCoord, this.pointArr)
     if (num !== false) { // 判断点击是否在点集合的点范围内，此时不可增加点
-      var point = this.pointArr[num]
-      this.selPoint = {
-        index: num,
-        oldPoint: [point[0], point[1]],
-        clickCoord
-      }
+      this.setSelPoint(num, clickCoord)
       return
     }
     if (!this.isClosed) { // 未闭合的情况下,直接增加
@@ -242,14 +237,17 @@ class Curve {
     }
     // 闭合的情况下,判断点是否在曲线上
     var ind = this.isPointInCurve(clickCoord)
+    console.log(ind)
     if (ind !== false) { // 增加点在曲线上
       var len = this.pointArr.length
       this.newPointIndexAtClosed = ind + 1// 新增点的索引位置
       if (ind + 1 === len) {
+        console.log(clickCoord)
         this.pointArr.push(clickCoord)
       } else {
         this.pointArr.splice((ind + 1) % len, 0, clickCoord)
       }
+      this.setSelPoint(ind + 1, clickCoord)
       this.curveList = getCurveList(this.pointArr)
       this.reDraw()
       return
@@ -273,6 +271,14 @@ class Curve {
     this.isMouseDown = false
     this.selPoint = null
   }
+  setSelPoint (num, clickCoord) { // 设置选中的点
+    var point = this.pointArr[num]
+    this.selPoint = {
+      index: num,
+      oldPoint: [point[0], point[1]],
+      clickCoord
+    }
+  }
   /* 判断点是否在曲线上 */
   isPointInCurve (point) {
     var len = this.curveList.length
@@ -280,7 +286,7 @@ class Curve {
     for (var i = 0; i < len; i++) {
       var list = this.curveList[i]
       this.ctx.beginPath()
-      this.ctx.lineWidth = 3
+      this.ctx.lineWidth = 5
       this.ctx.moveTo(list[0][0], list[0][1])
       setCurvefragment(list, this.ctx)
       this.ctx.closePath()
@@ -293,19 +299,8 @@ class Curve {
     return false
   }
   isPointInCurveArea (point) {
-    var list = this.curveList
-    var len = list.length
-    console.log(list)
-    this.ctx.beginPath()
-    this.ctx.moveTo(list[0][0][0], list[0][0][1])
-    for (var i = 0; i < len; i++) {
-      setCurvefragment(list, this.ctx)
-    }
-    this.ctx.closePath()
-    this.ctx.stroke()
-    this.ctx.fillStyle = 'red'
-    this.ctx.fill()
-    return this.ctx.isPointInPath(point[0], point[1])
+    var bool = isPointInCurveArea(point, this.pointArr, this.ctx)
+    return bool || (this.getClickPointInd(point, this.pointArr) !== false)
   }
 }
 export {
