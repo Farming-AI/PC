@@ -54,13 +54,17 @@ function drawCurvePath (arr, ctx, option = {fillStyle: 'rgba(179, 205, 65, .5)',
 function isPointInCurveArea (point, arr, ctx) { // point 选中的点 arr绘制曲线的点集合
   var list = getCurveList(arr)
   var len = list.length
+  ctx.save()
   ctx.beginPath()
   ctx.moveTo(list[0][0][0], list[0][0][1])
+  ctx.lineWidth = 10
   for (var i = 0; i < len; i++) {
     setCurvefragment(list[i], ctx)
   }
   ctx.closePath()
-  return ctx.isPointInPath(point[0], point[1])
+  var bool = ctx.isPointInPath(point[0], point[1]) || ctx.isPointInStroke(point[0], point[1])
+  ctx.restore()
+  return bool
 }
 class Curve {
   constructor (option = {}) {
@@ -123,7 +127,7 @@ class Curve {
   }
 
   withDraw () { // 撤回
-    if (this.pointArr.length <= 3 && this.isClosed) { // 当点少于3且是闭合状态时操作无效
+    if (this.isClosed || this.pointArr.length === 0) { // 当点少于1或者闭合状态时操作无效
       return
     }
     if (this.newPointIndexAtClosed === null) { // 当不是插入点的时候
@@ -144,7 +148,11 @@ class Curve {
     this.reDraw()
   }
   reDraw (cb) { // 重绘, 完成后可执行传入的回调
-    if (!this.el || this.pointArr.length === 0) { return }
+    if (!this.el) { return }
+    if (this.pointArr.length === 0) {
+      this.empty()
+      return
+    }
     this.empty()
     var ctx = this.ctx
     ctx.save()
@@ -237,12 +245,10 @@ class Curve {
     }
     // 闭合的情况下,判断点是否在曲线上
     var ind = this.isPointInCurve(clickCoord)
-    console.log(ind)
     if (ind !== false) { // 增加点在曲线上
       var len = this.pointArr.length
       this.newPointIndexAtClosed = ind + 1// 新增点的索引位置
       if (ind + 1 === len) {
-        console.log(clickCoord)
         this.pointArr.push(clickCoord)
       } else {
         this.pointArr.splice((ind + 1) % len, 0, clickCoord)
@@ -286,7 +292,7 @@ class Curve {
     for (var i = 0; i < len; i++) {
       var list = this.curveList[i]
       this.ctx.beginPath()
-      this.ctx.lineWidth = 5
+      this.ctx.lineWidth = 10
       this.ctx.moveTo(list[0][0], list[0][1])
       setCurvefragment(list, this.ctx)
       this.ctx.closePath()
